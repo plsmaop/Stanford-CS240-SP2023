@@ -49,6 +49,7 @@ static uint64_t next_id;
 
 // Use a 2MB stack.
 #define STACK_SIZE (1 << 21)
+#define STACK_ALIGN 16
 
 // Corresponds to thread_start in swtch.S.
 void thread_start(void);
@@ -96,6 +97,35 @@ static struct thread* thread_new(threadfn_t fn, void* arg) {
     // following values:
     // t->ctx.mxcsr = 0x1F80;
     // t->ctx.x87 = 0x037F;
+
+    struct thread* t = (struct thread)(malloc(sizeof(struct thread)));
+    if (!t) return NULL;
+
+    t->stack = aligned_alloc(STACK_ALIGN, STACK_SIZE);
+    if (!t->stack) {
+        free(t);
+        return NULL;
+    }
+
+    t->id = next_id++;
+    t->state = STATE_RUNNABLE;
+
+    t->ctx.rsp = (uint64_t)(t->stack + STACK_SIZE);
+    t->ctx.rsp -= t->ctx.rsp % STACK_ALIGN;
+
+    t->ctx.rsp -= sizeof(void*);
+    *(threadfn_t*)t->ctx.rsp = fn;
+
+    t->ctx.rsp -= sizeof(void*);
+    *(void**)t->ctx.rsp = arg;
+
+    t->ctx.rsp -= sizeof(void*);
+    *(void**)t->ctx.rsp = thread_start;
+
+    t->ctx.mxcsr = 0x1F80;
+    t->ctx.x87 = 0x037F;
+
+    return t;
 }
 
 // Initializes the threading library. This should create the scheduler (a
