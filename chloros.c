@@ -91,7 +91,6 @@ static struct thread* thread_new(threadfn_t fn, void* arg) {
     // Hint: set up the thread so that when it gets context switched for the
     // first time, it will execute thread_start() with 'fn' at the top of the
     // stack, and arg above 'fn'.
-    assert(!"unimplemented");
 
     // You'll want to initialize the context's mxcsr and x87 registers to the
     // following values:
@@ -114,10 +113,10 @@ static struct thread* thread_new(threadfn_t fn, void* arg) {
     t->ctx.rsp -= t->ctx.rsp % STACK_ALIGN;
 
     t->ctx.rsp -= sizeof(void*);
-    *(threadfn_t*)t->ctx.rsp = fn;
+    *(void**)t->ctx.rsp = arg;
 
     t->ctx.rsp -= sizeof(void*);
-    *(void**)t->ctx.rsp = arg;
+    *(threadfn_t*)t->ctx.rsp = fn;
 
     t->ctx.rsp -= sizeof(void*);
     *(void**)t->ctx.rsp = thread_start;
