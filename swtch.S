@@ -14,13 +14,30 @@ ctxswitch:
 	// FIXME: currently this only saves rsp/mxcsr/x87 and loads mxcsr/x87. You
 	// should update this function so that it saves and reloads the entire
 	// execution context.
-	movq %rsp, 0x0(%rdi)
-	stmxcsr 0x38(%rdi)
-	fnstcw 0x3C(%rdi)
 
+	// save old context
+	movq %rsp, 0x0(%rdi)
+    movq %r15, 0x8(%rdi)
+    movq %r14, 0x10(%rdi)
+    movq %r13, 0x18(%rdi)
+    movq %r12, 0x20(%rdi)
+    movq %rbx, 0x28(%rdi)
+    movq %rbp, 0x30(%rdi)
+    stmxcsr 0x38(%rdi)
+    fnstcw 0x3C(%rdi)
+
+    // load new context
+    movq 0x0(%rsi), %rsp
+    movq 0x8(%rsi), %r15
+    movq 0x10(%rsi), %r14
+    movq 0x18(%rsi), %r13
+    movq 0x20(%rsi), %r12
+    movq 0x28(%rsi), %rbx
+    movq 0x30(%rsi), %rbp
 	ldmxcsr 0x38(%rsi)
 	fldcw 0x3C(%rsi)
 
+	ret
 
 // thread_start()
 //

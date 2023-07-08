@@ -66,7 +66,6 @@ static struct thread* running;
 // This is the function that the scheduler runs. It should continuously pop a
 // new thread from the run queue and attempt to run it.
 static void schedule(void* _) {
-    (void) _;
 
     // FIXME: while there are still threads in the run queue, pop the next one
     // and run it. Make sure to adjust 'running' before you switch to it. Once
@@ -78,7 +77,31 @@ static void schedule(void* _) {
     // about what happens when the scheduler first starts up. At that point
     // 'running' might be the initial thread, which should first be put back on
     // the run queue before the main scheduler loop begins.
-    assert(!"unimplemented");
+
+    runq_push_front(running);
+
+    while (runq_front) {
+        struct thread* next_thread = runq_front;
+        runq_remove(next_thread);
+
+        if (next_thread->state != STATE_RUNNABLE) {
+            free(next_thread->stack);
+            free(next_thread);
+            continue;
+        }
+
+        running = next_thread;
+        ctxswitch(&scheduler->ctx, &running->ctx);
+
+        if (running->state == STATE_EXITED) {
+            free(running->stack);
+            free(running);
+        } else {
+            runq_push_back(running);
+        }
+    }
+
+    printf("end schedule loop\n");
 }
 
 // Creates a new thread that will execute fn(arg) when scheduled. Return the
@@ -97,10 +120,10 @@ static struct thread* thread_new(threadfn_t fn, void* arg) {
     // t->ctx.mxcsr = 0x1F80;
     // t->ctx.x87 = 0x037F;
 
-    struct thread* t = (struct thread)(malloc(sizeof(struct thread)));
+    struct thread* t = (struct thread *)(malloc(sizeof(struct thread)));
     if (!t) return NULL;
 
-    t->stack = aligned_alloc(STACK_ALIGN, STACK_SIZE);
+    t->stack = (uint8_t *)aligned_alloc(STACK_ALIGN, STACK_SIZE);
     if (!t->stack) {
         free(t);
         return NULL;
@@ -133,13 +156,32 @@ static struct thread* thread_new(threadfn_t fn, void* arg) {
 bool thread_init(void) {
     // FIXME: create the scheduler by allocating a new thread for it. You'll
     // want to store the newly allocated scheduler in 'scheduler'.
-    assert(!"unimplemented");
+    scheduler = thread_new(schedule, NULL);
+    if (!scheduler) {
+        return false;
+    }
 
     // FIXME: register the initial thread (the currently executing context) as
     // a thread. It just needs a thread object but doesn't need a stack or any
     // initial context as it is already running. Make sure to update 'running'
     // since it is already running.
-    assert(!"unimplemented");
+    running = (struct thread*)malloc(sizeof(struct thread));
+    if (!running) {
+        free(scheduler);
+        return false;
+    }
+
+    running->stack = (uint8_t *)aligned_alloc(STACK_ALIGN, STACK_SIZE);
+    if (!running->stack) {
+        free(running);
+        return false;
+    }
+
+    running->id = next_id++;
+    running->state = STATE_RUNNABLE;
+
+    ctxswitch(&running->ctx, &scheduler->ctx);
+    return true;
 }
 
 // Spawn a new thread. This should create a new thread for executing fn(arg),
@@ -147,7 +189,15 @@ bool thread_init(void) {
 // switch to the scheduler).
 bool thread_spawn(threadfn_t fn, void* arg) {
     // FIXME
-    assert(!"unimplemented");
+    struct thread* new_thread = thread_new(fn, arg);
+    if (!new_thread) {
+        return false;
+    }
+
+    runq_push_front(new_thread);
+    ctxswitch(&running->ctx, &scheduler->ctx);
+  
+    return true;
 }
 
 // Wait until there are no more other threads.
@@ -161,8 +211,13 @@ void thread_wait(void) {
 bool thread_yield(void) {
     assert(running != NULL);
     // FIXME: if there are no threads in the run queue, return false. Otherwise
-    // switch to the scheduler so that we can run one of them.
-    assert(!"unimplemented");
+    // switch to the scheduler so that we can run one of them.  
+    if (runq_front) {
+        ctxswitch(&running->ctx, &scheduler->ctx);
+        return true;
+    } 
+    
+    return false;
 }
 
 // The entrypoint for a new thread. This should call the requested function
